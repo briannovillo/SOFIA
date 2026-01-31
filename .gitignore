@@ -1,23 +1,26 @@
-# Archivos compilados
+# Compiled / generated files
 *.bin
 *.o
 *.elf
 *.img
 *.iso
+*.EFI
+*.so
+ovmf_vars.fd
 
-# Excepciones: los binarios finales que queremos versionar
+# Exceptions: final binaries we want to version
 !bootloader/boot_sector_debug.bin
 !kernel/build/kernel_flat.bin
 
-# Directorios de build temporales
+# Temporary build dirs
 dist/
 build/
 
-# Archivos de macOS
+# macOS
 .DS_Store
 ._*
 
-# Archivos de editor
+# Editor
 *.swp
 *.swo
 *~

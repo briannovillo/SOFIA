@@ -61,6 +61,15 @@ After successful boot:
 
 ## 🏗️ Architecture
 
+**Two boot paths:**
+
+| Path | Bootloader | Kernel | Display |
+|------|------------|--------|---------|
+| **Legacy/MBR** | `boot_sector_debug.asm` (512 B) | `kernel.asm` → kernel.bin | VGA text 80×25 |
+| **UEFI** | `bootloader/uefi` → BOOTX64.EFI | `kernel64.asm` → kernel64.bin | GOP framebuffer |
+
+### Legacy (MBR)
+
 ```
 ┌─────────────────────────────────────┐
 │  MBR Bootloader (512 bytes)         │
@@ -72,11 +81,32 @@ After successful boot:
                  │
                  ▼
 ┌─────────────────────────────────────┐
-│  Kernel (4KB flat binary)           │
+│  Kernel (kernel.bin)                │
 │  - kernel.asm (modular)             │
-│  - VGA text mode UI                 │
-│  - Keyboard driver                  │
-│  - PC speaker beep                  │
+│  - VGA text mode UI                  │
+│  - Keyboard, speaker, logo          │
+└─────────────────────────────────────┘
+```
+
+### UEFI (GOP)
+
+```
+┌─────────────────────────────────────┐
+│  UEFI Bootloader (C + GNU-EFI)      │
+│  - bootloader/uefi/ → BOOTX64.EFI   │
+│  - Loads kernel64.bin at 2MB        │
+│  - Passes GOP: RDI=fb, RSI=pitch,   │
+│    RDX=width, RCX=height            │
+└─────────────────────────────────────┘
+                 │
+                 ▼
+┌─────────────────────────────────────┐
+│  64-bit Kernel (kernel64.bin)      │
+│  - kernel64.asm (GOP path inline)   │
+│  - White screen, SOFIA logo (each   │
+│    letter made of many S,O,F,I,A),  │
+│  - Blinking cursor (left, below     │
+│    logo); slow blink (80M cycles)   │
 └─────────────────────────────────────┘
 ```
 
@@ -85,33 +115,41 @@ After successful boot:
 ## 📂 Project Structure
 
 ```
-SOFIA-Min-UEFI-v0.1/
-├── .gitignore                               # Git configuration
-├── LICENSE                                  # MIT License
-├── README.md                                # Complete documentation
-├── test-qemu.sh                             # QEMU testing script
+SOFIA/
+├── .gitignore
+├── LICENSE
+├── README.md
+├── test-qemu.sh                             # QEMU test (Legacy)
 │
 ├── bootloader/
-│   ├── boot_sector_debug.asm               # Bootloader source code (183 lines)
-│   └── boot_sector_debug.bin               # Bootloader binary (512 bytes)
+│   ├── boot_sector_debug.asm                # MBR bootloader (Legacy)
+│   ├── boot_sector_debug.bin
+│   └── uefi/                               # UEFI bootloader
+│       ├── bootloader.c
+│       ├── build-uefi.sh
+│       ├── Makefile
+│       ├── README.md
+│       ├── test-uefi-qemu.sh                # QEMU + OVMF test
+│       └── BOOTX64.EFI
 │
 ├── kernel/
-│   ├── build-kernel.sh                      # Kernel build script
+│   ├── build-kernel.sh                      # Legacy kernel
+│   ├── build-kernel64.sh                    # 64-bit kernel (UEFI)
 │   ├── arch/x86_64/
-│   │   ├── kernel.asm                      # Main kernel file (95 lines)
-│   │   └── modules/                        # Modular architecture
-│   │       ├── video/                      # VGA & cursor (36 lines)
-│   │       ├── ui/                         # Logo rendering (277 lines)
-│   │       └── drivers/                    # Keyboard & speaker (328 lines)
+│   │   ├── kernel.asm                       # Legacy kernel
+│   │   ├── kernel64.asm                     # 64-bit kernel (GOP logo, cursor)
+│   │   ├── modules/                         # Legacy modules
+│   │   └── modules64/                       # 64-bit modules (video, ui, drivers)
 │   └── build/
-│       └── kernel.bin                      # Kernel binary (4 KB)
+│       ├── kernel.bin
+│       └── kernel64.bin
 │
 ├── scripts/
-│   ├── README.md                            # Scripts documentation
-│   └── make-bootable-usb-simple.sh          # USB installation script
+│   └── make-bootable-usb-simple.sh
 │
 └── toolchain/
-    └── Dockerfile                           # Build environment
+    ├── Dockerfile
+    └── README.md
 ```
 
 ---
@@ -145,21 +183,21 @@ cd ..
 
 ### 3. Compile Kernel
 
+**Legacy (VGA):**
 ```bash
 cd kernel
 ./build-kernel.sh
+# → build/kernel.bin
 ```
 
-Or manually:
-
+**UEFI (64-bit, GOP):**
 ```bash
 cd kernel
-docker run --rm --platform linux/amd64 -v "$(pwd)":/work -w /work/arch/x86_64 sofia-uefi-toolchain bash -c "
-apt-get update -qq && apt-get install -y -qq nasm
-nasm -f bin kernel.asm -o ../../build/kernel.bin
-"
-cd ..
+./build-kernel64.sh
+# → build/kernel64.bin
 ```
+
+**UEFI bootloader:** build from `bootloader/uefi` (see [bootloader/uefi/README.md](bootloader/uefi/README.md)).
 
 ---
 
@@ -234,6 +272,17 @@ Before creating a USB, verify in QEMU:
 | **Garbled text** | Wrong VGA mode or kernel compiled as ELF (must be flat binary) |
 | **No keyboard input** | Make sure QEMU window has focus |
 | **No sound** | Normal - QEMU often doesn't emulate PC speaker correctly |
+
+### Testing UEFI (GOP) in QEMU
+
+Build the 64-bit kernel and UEFI bootloader, then run:
+
+```bash
+cd bootloader/uefi
+./test-uefi-qemu.sh
+```
+
+You should see a white screen, the SOFIA logo (letters made of letters), and a slow-blinking cursor on the left below the logo. See [bootloader/uefi/README.md](bootloader/uefi/README.md) for dependencies (OVMF, mtools, etc.).
 
 ### QEMU Keyboard Shortcuts
 
@@ -341,22 +390,24 @@ dd if=kernel/build/kernel.bin of=\\.\PhysicalDrive1 bs=512 seek=2
 
 ## 📚 Current Features
 
-✅ **Custom MBR bootloader** (512 bytes, Assembly)  
-✅ **Modular kernel architecture** (organized by functionality)  
-✅ **VGA text mode** (80x25, customizable background)  
-✅ **Software cursor** (blinking, Commodore 64 style)  
-✅ **PS/2 keyboard driver** (full scancode to ASCII mapping)  
-✅ **Dynamic color themes** (press TAB to cycle through 4 light backgrounds)  
-✅ **PC speaker beep** (startup sound)  
-✅ **ASCII art logo** (SOFIA - each letter made of itself)  
-✅ **Hardware-optimized** (no flickering on real hardware)  
+**Legacy boot:**  
+✅ Custom MBR bootloader (512 bytes, Assembly)  
+✅ Modular kernel, VGA text 80×25, software cursor, TAB color themes  
+✅ PS/2 keyboard, PC speaker beep  
+✅ SOFIA logo (each letter made of itself), subtitle "First AI Operating System"
+
+**UEFI boot:**  
+✅ UEFI bootloader (GNU-EFI), loads 64-bit kernel at 2MB  
+✅ GOP framebuffer: white background, SOFIA logo (letters made of letters: S from many S’s, O from O’s, etc.), 464×80 px, centered  
+✅ Blinking cursor left below logo, slow blink (80M cycles)  
+✅ Same toolchain (Docker) for both builds  
 
 ## 📚 Next Steps
 
 ### Level 1: More kernel functionality
 - [ ] Handle interrupts (IDT)
 - [ ] Hardware interrupts for keyboard (IRQ1)
-- [ ] 64-bit mode (long mode)
+- [x] 64-bit mode (long mode) – UEFI kernel
 - [ ] Command interpreter / shell
 
 ### Level 2: File system
@@ -373,7 +424,7 @@ dd if=kernel/build/kernel.bin of=\\.\PhysicalDrive1 bs=512 seek=2
 ### Level 4: Drivers
 - [ ] Network driver (E1000)
 - [ ] Disk driver (ATA/AHCI)
-- [ ] Graphics driver (VESA framebuffer)
+- [x] Graphics (GOP framebuffer – UEFI path)
 - [ ] USB driver
 
 ---

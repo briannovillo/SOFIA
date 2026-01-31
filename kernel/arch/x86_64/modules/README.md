@@ -1,6 +1,8 @@
-# SOFIA OS - Kernel Modules
+# SOFIA OS – Kernel Modules
 
-This folder contains the kernel modules organized by functionality.
+This folder contains the **Legacy (VGA)** kernel modules. They are used by `kernel.asm` → `kernel.bin` for MBR boot.
+
+For **UEFI boot**, the 64-bit kernel is `kernel64.asm` → `kernel64.bin`. It uses `modules64/` (video, ui, drivers) and, when booted via GOP, draws the SOFIA logo and cursor **inline** in `kernel64.asm` (white background, logo 464×80 with letters made of letters, cursor left below logo, slow blink).
 
 ## Module Structure
 
@@ -43,15 +45,16 @@ modules/
 
 ```
 kernel/
-├── build/                    # Compiled binaries
-│   └── kernel.bin
-├── arch/x86_64/              # x86_64 architecture
-│   ├── kernel.asm            # ⭐ Main kernel (includes all modules)
-│   └── modules/              # Kernel modules
-│       ├── video/            # Video and display
-│       ├── ui/               # User interface
-│       └── drivers/          # Hardware drivers
-└── build-kernel.sh           # Build script
+├── build/
+│   ├── kernel.bin            # Legacy (VGA)
+│   └── kernel64.bin          # UEFI (GOP)
+├── arch/x86_64/
+│   ├── kernel.asm            # Legacy main (includes modules/)
+│   ├── kernel64.asm          # 64-bit main (includes modules64/, GOP path inline)
+│   ├── modules/              # Legacy modules (this folder)
+│   └── modules64/            # 64-bit modules (video, ui, drivers)
+├── build-kernel.sh           # Legacy
+└── build-kernel64.sh         # 64-bit (UEFI)
 ```
 
 ## Main File: `kernel.asm`
