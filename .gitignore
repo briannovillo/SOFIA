@@ -1,0 +1,28 @@
+# Archivos compilados
+*.bin
+*.o
+*.elf
+*.img
+*.iso
+
+# Excepciones: los binarios finales que queremos versionar
+!bootloader/boot_sector_debug.bin
+!kernel/build/kernel_flat.bin
+
+# Directorios de build temporales
+dist/
+build/
+
+# Archivos de macOS
+.DS_Store
+._*
+
+# Archivos de editor
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Docker
+.dockerignore
